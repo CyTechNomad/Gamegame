@@ -44,102 +44,111 @@ public class Battle
         return chance < turnwastechance;
     }
 
-    public void attack(Entity attacker, Entity defender, Attack attack)
-    {
-        if (attacker instanceof Enemy)
-        {
-            battlePanel.getBattleLog().setText("\"" + ((Enemy) attacker).getAttackMsg()+ "\" " + attacker.getName() + " used " + attack.getName() + "!");
+   private void setAttackBattleText(Entity attacker, Attack attack) {
+        String msg = attacker.getName() + " used " + attack.getName() + "!";
+
+        if (attacker instanceof Enemy){
+            msg = "\"" + ((Enemy) attacker).getAttackMsg()+ "\" " + msg;
         }
-        else
-        {
-            battlePanel.getBattleLog().setText(attacker.getName() + " used " + attack.getName() + "!");
-        }
+
+        battlePanel.getBattleLog().setText(msg);
+    }
+
+    private int calcDamage (Entity attacker, Entity defender, Attack attack) throws ExecutionControl.NotImplementedException {
         Random random = new Random();
 
         // Critical multiplier
         int critMultiplier = 1;
 
-        if (isCriticalHit())
-        {
+        // Set critMultiplier if the attack was a crit or charged
+        if (isCriticalHit() || attacker.isCharging()) {
             critMultiplier = 2;
+            attacker.setCharging(false);
 
             battlePanel.getBattleLog().setText(battlePanel.getBattleLog().getText() + " Critical Hit!");
         }
-        
-        if (attacker.isCharging())
-        {
-            critMultiplier = 2;
-            attacker.setCharging(false);
-        }
 
-        if (attacker.isBlocking())
-        {
-            battlePanel.getBattleLog().setText(attacker.getName() + " drops their guard.");
-            attacker.setBlocking(false);
-        }
+        // Random factor between ~86% - 100%
+        double damageScalar = (220 + random.nextInt(36)) / 255.0;
 
-        int damage;
-        if (!defender.isBlocking() && !attacker.isBlocking()) {
+        // Determine the stat to be used for damage/defense calculations
+        int attackerAttack;
+        int defenderDefense;
+        String soundEffectFileName;
 
-            String soundEffectFileName;
-
-            // Random factor between 220 and 255
-            double randomFactor = (220 + random.nextInt(36)) / 255.0;
-
-            // Determine the stat to be used for damage/defense calculations
-
-            int attackerAttack = 0;
-            int defenderDefense = 0;
-
-            if (attack.getType().equals("Physical")) {
+        switch (attack.getType()) {
+            case "Physical":
                 attackerAttack = attacker.getAttack();
                 defenderDefense = defender.getDefense();
                 soundEffectFileName = "src/Game/Music/physicalattack.wav";
-            } else if (attack.getType().equals("Magic")) {
+                break;
+            case "Magic":
                 attackerAttack = attacker.getMagic();
                 defenderDefense = defender.getMagic();
                 soundEffectFileName = "src/Game/Music/magicattack.wav";
-            } else
-            {
-                soundEffectFileName = "";
-            }
-            Timer soundEffectTimer = new Timer(100, e ->
-            {
-                this.soundPlayer.play(soundEffectFileName);
-            });
-            soundEffectTimer.setRepeats(false);
-            soundEffectTimer.start();
-
-            // Damage formula
-            damage = (int) ((((((2 * attacker.getLevel() * critMultiplier + 2) + 2) * attack.getPower() * ((double) attackerAttack / defenderDefense)) / 50) + 2) * randomFactor);
-            if (attacker instanceof Player)
-            {
-                battlePanel.getEnemyPanel().dropHealthBar(defender.getCurrentHealth() - damage , defender);
-            }
-            else
-            {
-                battlePanel.getPlayerPanel().dropHealthBar(defender.getCurrentHealth() - damage, defender);
-            }
-
-            battlePanel.getBattleLog().setText(battlePanel.getBattleLog().getText() + " " + defender.getName() + " takes " + damage + " damage!");
+                break;
+            default:
+                // we Do this to avoid a divide by zero exception
+                throw new ExecutionControl.NotImplementedException("UnExpected Attack Type");
         }
-        else
+
+        Timer soundEffectTimer = new Timer(100, e ->
         {
-            damage = 0;
-            battlePanel.getBattleLog().setText(battlePanel.getBattleLog().getText() + " " + defender.getName() +" blocked the attack.");
-            defender.setBlocking(false);
-        }
+            this.soundPlayer.play(soundEffectFileName);
+        });
+        soundEffectTimer.setRepeats(false);
+        soundEffectTimer.start();
 
-        // Deal the damage
-        defender.setCurrentHealth(defender.getCurrentHealth() - damage);
+
+        // Damage formula
+        int baseDamage =(2 * attacker.getLevel() * critMultiplier + 4);
+        double defensiveFactor = (double)attackerAttack / defenderDefense;
+        int damage = (int) (((double) (baseDamage * attack.getPower() * defensiveFactor) / 50) + 2);
+        return (int)(damage * damageScalar);
+    }
+
+    public void attack(Entity attacker, Entity defender, Attack attack) throws ExecutionControl.NotImplementedException {
+        setAttackBattleText(attacker, attack);
+        JTextField battleLog = battlePanel.getBattleLog();
 
         // Reduce the use counter.
         attack.setUses(attack.getUses() - 1);
-        if (attack.getUses() < 0)
-        {
+        if (attack.getUses() < 0) {
             attack.setUses(0);
         }
+
+        // attacker must drop guard to attack
+        if (attacker.isBlocking()) {
+            battleLog.setText(attacker.getName() + " drops their guard.");
+            attacker.setBlocking(false);
+        }
+
+        // if defender is blocking no damage is calculated
+        if (defender.isBlocking()) {
+            battleLog.setText(battleLog.getText() + " " + defender.getName() +" blocked the attack.");
+
+            // once defender blocks the hit they are no longer blocking
+            defender.setBlocking(false);
+            return;
+        }
+
+        int damage = calcDamage(attacker, defender, attack);
+
+        EntityPanel bp;
+        if (attacker instanceof Player) {
+            bp = battlePanel.getEnemyPanel();
+        }
+        else {
+            bp = battlePanel.getPlayerPanel();
+        }
+        bp.dropHealthBar(defender.getCurrentHealth() - damage, defender);
+
+        battleLog.setText(battleLog.getText() + " " + defender.getName() + " takes " + damage + " damage!");
+
+        // Deal the damage
+        defender.setCurrentHealth(defender.getCurrentHealth() - damage);
     }
+
 
     public void determineEnemyAction()
     {
