@@ -44,7 +44,7 @@ public class Battle
         return chance < turnwastechance;
     }
 
-   private void setAttackBattleText(Entity attacker, Attack attack) {
+    private void setAttackBattleText(Entity attacker, Attack attack) {
         String msg = attacker.getName() + " used " + attack.getName() + "!";
 
         if (attacker instanceof Enemy){
