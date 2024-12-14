@@ -60,10 +60,13 @@ public class Battle
         // Critical multiplier
         int critMultiplier = 1;
 
+        boolean isCritical = isCriticalHit()
         // Set critMultiplier if the attack was a crit or charged
-        if (isCriticalHit() || attacker.isCharging()) {
+        if (isCritical || attacker.isCharging()) {
             critMultiplier = 2;
             attacker.setCharging(false);
+        }
+        if (isCritical){
 
             battlePanel.getBattleLog().setText(battlePanel.getBattleLog().getText() + " Critical Hit!");
         }
